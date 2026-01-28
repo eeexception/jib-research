@@ -269,6 +269,28 @@ public class JibContainerBuilder {
   }
 
   /**
+   * Sets the containerizing mode.
+   *
+   * <p>The containerizing mode determines where the Java launch command is placed in the Docker
+   * image configuration:
+   *
+   * <ul>
+   *   <li>{@link com.google.cloud.tools.jib.configuration.ContainerizingMode#ENTRYPOINT}
+   *       (default): Java command goes to Docker ENTRYPOINT
+   *   <li>{@link com.google.cloud.tools.jib.configuration.ContainerizingMode#CMD}: Java command
+   *       goes to Docker CMD, preserving base image ENTRYPOINT
+   * </ul>
+   *
+   * @param containerizingMode the containerizing mode
+   * @return this
+   */
+  public JibContainerBuilder setContainerizingMode(
+      com.google.cloud.tools.jib.configuration.ContainerizingMode containerizingMode) {
+    containerConfigurationBuilder.setContainerizingMode(containerizingMode);
+    return this;
+  }
+
+  /**
    * Sets the container entrypoint. This is the beginning of the command that is run when the
    * container starts. {@link #setProgramArguments} sets additional tokens.
    *

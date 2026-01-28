@@ -21,6 +21,7 @@ import com.google.cloud.tools.jib.api.buildplan.ImageFormat;
 import com.google.cloud.tools.jib.plugins.common.AuthProperty;
 import com.google.cloud.tools.jib.plugins.common.RawConfiguration;
 import java.nio.file.Path;
+import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -188,6 +189,12 @@ public class MavenRawConfiguration implements RawConfiguration {
   @Override
   public String getContainerizingMode() {
     return jibPluginConfiguration.getContainerizingMode();
+  }
+
+  @Override
+  @Nullable
+  public String getEntrypointMode() {
+    return jibPluginConfiguration.getEntrypointMode();
   }
 
   @Override

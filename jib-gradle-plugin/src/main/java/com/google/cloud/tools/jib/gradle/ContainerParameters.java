@@ -53,6 +53,7 @@ public class ContainerParameters {
   private String appRoot = "";
   @Nullable private String user;
   @Nullable private String workingDirectory;
+  @Nullable private String entrypointMode;
   private final Property<String> filesModificationTime;
   private final Property<String> creationTime;
 
@@ -279,6 +280,25 @@ public class ContainerParameters {
 
   public void setWorkingDirectory(String workingDirectory) {
     this.workingDirectory = workingDirectory;
+  }
+
+  /**
+   * Gets the entrypoint mode.
+   *
+   * @return the entrypoint mode ("entrypoint" or "cmd"), or {@code null} if not configured
+   */
+  @Input
+  @Nullable
+  @Optional
+  public String getEntrypointMode() {
+    if (System.getProperty(PropertyNames.CONTAINER_ENTRYPOINT_MODE) != null) {
+      return System.getProperty(PropertyNames.CONTAINER_ENTRYPOINT_MODE);
+    }
+    return entrypointMode;
+  }
+
+  public void setEntrypointMode(String entrypointMode) {
+    this.entrypointMode = entrypointMode;
   }
 
   @Input

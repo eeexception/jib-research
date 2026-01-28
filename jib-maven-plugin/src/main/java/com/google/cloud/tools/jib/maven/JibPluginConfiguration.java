@@ -376,6 +376,10 @@ public abstract class JibPluginConfiguration extends AbstractMojo {
   @Parameter(property = PropertyNames.CONTAINERIZING_MODE)
   private String containerizingMode = "exploded";
 
+  @Parameter(property = PropertyNames.CONTAINER_ENTRYPOINT_MODE)
+  @Nullable
+  private String entrypointMode;
+
   @Parameter(property = PropertyNames.SKIP)
   private boolean skip;
 
@@ -805,6 +809,17 @@ public abstract class JibPluginConfiguration extends AbstractMojo {
   public String getContainerizingMode() {
     String property = getProperty(PropertyNames.CONTAINERIZING_MODE);
     return property != null ? property : containerizingMode;
+  }
+
+  /**
+   * Gets the entrypoint mode.
+   *
+   * @return the entrypoint mode ("entrypoint" or "cmd"), or {@code null} if not configured
+   */
+  @Nullable
+  public String getEntrypointMode() {
+    String property = getProperty(PropertyNames.CONTAINER_ENTRYPOINT_MODE);
+    return property != null ? property : entrypointMode;
   }
 
   boolean isSkipped() {

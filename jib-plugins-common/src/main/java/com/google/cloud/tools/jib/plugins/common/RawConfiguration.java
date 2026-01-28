@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import javax.annotation.Nullable;
 
 /**
  * Holds raw plugin configuration parameter values. Acts as a common adapter for heterogeneous
@@ -124,6 +125,14 @@ public interface RawConfiguration {
   Map<String, String> getDockerEnvironment();
 
   String getContainerizingMode();
+
+  /**
+   * Gets the entrypoint mode (where Java command is placed).
+   *
+   * @return the entrypoint mode string ("entrypoint" or "cmd"), or {@code null} if not set
+   */
+  @Nullable
+  String getEntrypointMode();
 
   Path getTarOutputPath();
 

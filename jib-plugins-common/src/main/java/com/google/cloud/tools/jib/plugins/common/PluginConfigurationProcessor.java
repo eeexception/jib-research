@@ -433,6 +433,7 @@ public class PluginConfigurationProcessor {
     jibContainerBuilder
         .setFormat(rawConfiguration.getImageFormat())
         .setPlatforms(getPlatformsSet(rawConfiguration))
+        .setContainerizingMode(getEntrypointModeChecked(rawConfiguration))
         .setEntrypoint(computeEntrypoint(rawConfiguration, projectProperties, jibContainerBuilder))
         .setProgramArguments(rawConfiguration.getProgramArguments().orElse(null))
         .setEnvironment(rawConfiguration.getEnvironment())
@@ -894,6 +895,34 @@ public class PluginConfigurationProcessor {
       return Optional.of(AbsoluteUnixPath.get(path));
     } catch (IllegalArgumentException ex) {
       throw new InvalidWorkingDirectoryException(path, path, ex);
+    }
+  }
+
+  /**
+   * Converts and validates the entrypoint mode from raw configuration.
+   *
+   * @param rawConfiguration the raw configuration
+   * @return the entrypoint mode enum (ENTRYPOINT or CMD)
+   * @throws InvalidEntrypointModeException if the mode value is invalid
+   */
+  @VisibleForTesting
+  static com.google.cloud.tools.jib.configuration.ContainerizingMode getEntrypointModeChecked(
+      RawConfiguration rawConfiguration) {
+    String rawMode = rawConfiguration.getEntrypointMode();
+
+    // Default to ENTRYPOINT mode if not specified (backward compatibility)
+    if (rawMode == null || rawMode.isEmpty()) {
+      return com.google.cloud.tools.jib.configuration.ContainerizingMode.ENTRYPOINT;
+    }
+
+    // Convert string to enum (case-insensitive)
+    String normalizedMode = rawMode.toLowerCase(java.util.Locale.US);
+    if ("entrypoint".equals(normalizedMode)) {
+      return com.google.cloud.tools.jib.configuration.ContainerizingMode.ENTRYPOINT;
+    } else if ("cmd".equals(normalizedMode)) {
+      return com.google.cloud.tools.jib.configuration.ContainerizingMode.CMD;
+    } else {
+      throw new InvalidEntrypointModeException(rawMode, "'entrypoint' or 'cmd'");
     }
   }
 

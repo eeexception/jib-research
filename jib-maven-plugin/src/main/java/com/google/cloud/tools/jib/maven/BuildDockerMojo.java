@@ -28,6 +28,7 @@ import com.google.cloud.tools.jib.plugins.common.InvalidAppRootException;
 import com.google.cloud.tools.jib.plugins.common.InvalidContainerVolumeException;
 import com.google.cloud.tools.jib.plugins.common.InvalidContainerizingModeException;
 import com.google.cloud.tools.jib.plugins.common.InvalidCreationTimeException;
+import com.google.cloud.tools.jib.plugins.common.InvalidEntrypointModeException;
 import com.google.cloud.tools.jib.plugins.common.InvalidFilesModificationTimeException;
 import com.google.cloud.tools.jib.plugins.common.InvalidPlatformException;
 import com.google.cloud.tools.jib.plugins.common.InvalidWorkingDirectoryException;
@@ -110,6 +111,10 @@ public class BuildDockerMojo extends JibPluginConfiguration {
     } catch (InvalidContainerizingModeException ex) {
       throw new MojoExecutionException(
           "invalid value for <containerizingMode>: " + ex.getInvalidContainerizingMode(), ex);
+
+    } catch (InvalidEntrypointModeException ex) {
+      throw new MojoExecutionException(
+          "invalid value for <container><entrypointMode>: " + ex.getMessage(), ex);
 
     } catch (InvalidWorkingDirectoryException ex) {
       throw new MojoExecutionException(
