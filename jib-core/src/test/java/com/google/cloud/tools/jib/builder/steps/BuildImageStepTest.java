@@ -304,6 +304,43 @@ public class BuildImageStepTest {
     Assert.assertNull(image.getProgramArguments());
   }
 
+  /**
+   * Reproduction test: verifies the core image assembly layer correctly handles null entrypoint
+   * with an explicit CMD. This is the exact combination the plugin layer must produce to preserve a
+   * base image ENTRYPOINT (e.g. /__cacert_entrypoint.sh) while routing the Java launch command
+   * through CMD.
+   *
+   * <p>Scenario: base image has ENTRYPOINT ["baseImageEntrypoint"] and CMD ["catalina.sh", "run"].
+   * The plugin sets entrypoint=null (for inheritance) and programArguments=Java command. Expected:
+   * base ENTRYPOINT is inherited, CMD is the Java command (not inherited from base).
+   */
+  @Test
+  public void test_nullEntrypoint_cmdSet_baseEntrypointInherited() {
+    // This is the combination the plugin layer needs to produce:
+    //   entrypoint = null        → base ENTRYPOINT like /__cacert_entrypoint.sh is inherited
+    //   programArguments = cmd   → Java command runs as CMD, passed to the entrypoint script
+    Mockito.when(mockContainerConfiguration.getEntrypoint()).thenReturn(null);
+    Mockito.when(mockContainerConfiguration.getProgramArguments())
+        .thenReturn(
+            ImmutableList.of("java", "-cp", "/app/classes:/app/libs/*", "com.example.MyApp"));
+
+    Image image =
+        new BuildImageStep(
+                mockBuildContext,
+                mockProgressEventDispatcherFactory,
+                baseImage,
+                baseImageLayers,
+                applicationLayers)
+            .call();
+
+    // Base image ENTRYPOINT is inherited because config entrypoint was null.
+    Assert.assertEquals(ImmutableList.of("baseImageEntrypoint"), image.getEntrypoint());
+    // CMD is the Java command — explicitly set, so base CMD ["catalina.sh","run"] is not inherited.
+    Assert.assertEquals(
+        ImmutableList.of("java", "-cp", "/app/classes:/app/libs/*", "com.example.MyApp"),
+        image.getProgramArguments());
+  }
+
   @Test
   public void test_generateHistoryObjects() {
     Image image =

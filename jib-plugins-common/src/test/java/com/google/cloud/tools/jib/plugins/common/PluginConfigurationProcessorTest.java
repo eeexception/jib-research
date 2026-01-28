@@ -220,6 +220,129 @@ public class PluginConfigurationProcessorTest {
     verify(logger, never()).accept(argThat(isLogWarn));
   }
 
+  /**
+   * Reproduction test: when INHERIT is used to preserve a base image ENTRYPOINT (e.g.
+   * /__cacert_entrypoint.sh), the auto-generated Java launch command is lost entirely. It does not
+   * appear in CMD, so there is no way for the base image entrypoint script to exec the Java
+   * application.
+   */
+  @Test
+  public void testReproduction_inheritEntrypoint_javaCommandLostFromCmd()
+      throws InvalidImageReferenceException, IOException, MainClassInferenceException,
+          InvalidAppRootException, InvalidWorkingDirectoryException, InvalidPlatformException,
+          InvalidContainerVolumeException, IncompatibleBaseImageJavaVersionException,
+          NumberFormatException, InvalidContainerizingModeException,
+          InvalidFilesModificationTimeException, InvalidCreationTimeException,
+          ExtraDirectoryNotFoundException {
+    when(rawConfiguration.getEntrypoint())
+        .thenReturn(Optional.of(Collections.singletonList("INHERIT")));
+
+    ContainerBuildPlan buildPlan = processCommonConfiguration();
+
+    // INHERIT correctly nulls the entrypoint so the base image ENTRYPOINT is preserved.
+    assertThat(buildPlan.getEntrypoint()).isNull();
+
+    // The Java launch command must be routed to CMD so that the base image entrypoint script
+    // (e.g. /__cacert_entrypoint.sh with "exec $@") can forward to the Java application.
+    // Currently this fails: the Java command is generated but discarded when INHERIT is active.
+    assertThat(buildPlan.getCmd())
+        .containsExactly(
+            "java", "-cp", "/app/resources:/app/classes:/app/libs/*", "java.lang.Object")
+        .inOrder();
+  }
+
+  /**
+   * Reproduction test: same gap for WAR projects. When INHERIT is used to preserve a base image
+   * ENTRYPOINT, the default Jetty launch command is lost. There is no mechanism to route it to CMD
+   * so the base entrypoint script can forward to the application server.
+   */
+  @Test
+  public void testReproduction_inheritEntrypoint_warProject_jettyCommandLostFromCmd()
+      throws InvalidImageReferenceException, IOException, MainClassInferenceException,
+          InvalidAppRootException, InvalidWorkingDirectoryException, InvalidPlatformException,
+          InvalidContainerVolumeException, IncompatibleBaseImageJavaVersionException,
+          NumberFormatException, InvalidContainerizingModeException,
+          InvalidFilesModificationTimeException, InvalidCreationTimeException,
+          ExtraDirectoryNotFoundException {
+    when(rawConfiguration.getEntrypoint())
+        .thenReturn(Optional.of(Collections.singletonList("INHERIT")));
+    when(projectProperties.isWarProject()).thenReturn(true);
+
+    ContainerBuildPlan buildPlan = processCommonConfiguration();
+
+    // INHERIT correctly nulls the entrypoint so the base image ENTRYPOINT is preserved.
+    assertThat(buildPlan.getEntrypoint()).isNull();
+
+    // The default Jetty launch command must be routed to CMD so that the base image entrypoint
+    // script can forward to the application server.
+    assertThat(buildPlan.getCmd())
+        .containsExactly("java", "-jar", "/usr/local/jetty/start.jar", "--module=ee10-deploy")
+        .inOrder();
+  }
+
+  /**
+   * Reproduction test: same gap with a custom main class. When INHERIT preserves the base image
+   * ENTRYPOINT, the Java command constructed with the user-specified main class is lost. CMD must
+   * carry it so the base entrypoint script can exec the correct application class.
+   */
+  @Test
+  public void testReproduction_inheritEntrypoint_customMainClass_javaCommandLostFromCmd()
+      throws InvalidImageReferenceException, IOException, MainClassInferenceException,
+          InvalidAppRootException, InvalidWorkingDirectoryException, InvalidPlatformException,
+          InvalidContainerVolumeException, IncompatibleBaseImageJavaVersionException,
+          NumberFormatException, InvalidContainerizingModeException,
+          InvalidFilesModificationTimeException, InvalidCreationTimeException,
+          ExtraDirectoryNotFoundException {
+    when(rawConfiguration.getEntrypoint())
+        .thenReturn(Optional.of(Collections.singletonList("INHERIT")));
+    when(rawConfiguration.getMainClass()).thenReturn(Optional.of("com.example.MyApp"));
+
+    ContainerBuildPlan buildPlan = processCommonConfiguration();
+
+    assertThat(buildPlan.getEntrypoint()).isNull();
+
+    // CMD must carry the Java command with the user-specified main class so the base entrypoint
+    // script can forward to it.
+    assertThat(buildPlan.getCmd())
+        .containsExactly(
+            "java", "-cp", "/app/resources:/app/classes:/app/libs/*", "com.example.MyApp")
+        .inOrder();
+  }
+
+  /**
+   * Reproduction test: same gap when JVM flags are configured. The Java command including the
+   * user-specified JVM flags must be routable to CMD when INHERIT is used to preserve the base
+   * image ENTRYPOINT.
+   */
+  @Test
+  public void testReproduction_inheritEntrypoint_jvmFlags_javaCommandLostFromCmd()
+      throws InvalidImageReferenceException, IOException, MainClassInferenceException,
+          InvalidAppRootException, InvalidWorkingDirectoryException, InvalidPlatformException,
+          InvalidContainerVolumeException, IncompatibleBaseImageJavaVersionException,
+          NumberFormatException, InvalidContainerizingModeException,
+          InvalidFilesModificationTimeException, InvalidCreationTimeException,
+          ExtraDirectoryNotFoundException {
+    when(rawConfiguration.getEntrypoint())
+        .thenReturn(Optional.of(Collections.singletonList("INHERIT")));
+    when(rawConfiguration.getJvmFlags()).thenReturn(Arrays.asList("-Xmx512m", "-Dapp.env=prod"));
+
+    ContainerBuildPlan buildPlan = processCommonConfiguration();
+
+    assertThat(buildPlan.getEntrypoint()).isNull();
+
+    // CMD must carry the Java command with the user-specified JVM flags so the base entrypoint
+    // script can forward to the fully configured JVM.
+    assertThat(buildPlan.getCmd())
+        .containsExactly(
+            "java",
+            "-Xmx512m",
+            "-Dapp.env=prod",
+            "-cp",
+            "/app/resources:/app/classes:/app/libs/*",
+            "java.lang.Object")
+        .inOrder();
+  }
+
   @Test
   public void testPluginConfigurationProcessor_extraDirectory()
       throws URISyntaxException, InvalidContainerVolumeException, MainClassInferenceException,
