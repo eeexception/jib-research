@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.test</groupId>
+  <artifactId>containerizing-mode</artifactId>
+  <version>1</version>
+
+  <properties>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <maven.compiler.target>1.8</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>com.google.cloud.tools</groupId>
+        <artifactId>jib-maven-plugin</artifactId>
+        <version>@@PluginVersion@@</version>
+        <configuration>
+          <from>
+            <image>localhost:5001/test-entrypoint-base</image>
+          </from>
+          <to>
+            <image>localhost:5001/maven-system-property-test</image>
+          </to>
+          <container>
+            <mainClass>com.test.HelloWorld</mainClass>
+            <args>
+              <arg>arg1</arg>
+              <arg>arg2</arg>
+            </args>
+            <!-- entrypointMode NOT specified - will use system property -->
+          </container>
+          <allowInsecureRegistries>true</allowInsecureRegistries>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
