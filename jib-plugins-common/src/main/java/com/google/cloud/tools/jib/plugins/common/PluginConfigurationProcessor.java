@@ -89,6 +89,9 @@ public class PluginConfigurationProcessor {
   private static final ImmutableList<String> CONST_LAYERS =
       ImmutableList.of(LayerType.DEPENDENCIES.getName(), LayerType.JVM_ARG_FILES.getName());
 
+  private static final ImmutableList<String> DEFAULT_JETTY_COMMAND =
+      ImmutableList.of("java", "-jar", "/usr/local/jetty/start.jar", "--module=ee10-deploy");
+
   private static final String DEFAULT_JETTY_APP_ROOT = "/var/lib/jetty/webapps/ROOT";
 
   private static final String JIB_CLASSPATH_FILE = "jib-classpath-file";
@@ -607,10 +610,7 @@ public class PluginConfigurationProcessor {
     // When INHERIT is used, mainClass/jvmFlags/etc. are still needed to construct the CMD.
     if (entrypointDefined
         && !isInherit
-        && (rawConfiguration.getMainClass().isPresent()
-            || !rawConfiguration.getJvmFlags().isEmpty()
-            || !rawExtraClasspath.isEmpty()
-            || rawConfiguration.getExpandClasspathDependencies())) {
+        && hasJavaLaunchConfiguration(rawConfiguration, rawExtraClasspath)) {
       projectProperties.log(
           LogEvent.info(
               "mainClass, extraClasspath, jvmFlags, and expandClasspathDependencies are ignored "
@@ -622,21 +622,16 @@ public class PluginConfigurationProcessor {
         return rawEntrypoint.get();
       }
 
-      if (!isInherit
-          && (rawConfiguration.getMainClass().isPresent()
-              || !rawConfiguration.getJvmFlags().isEmpty()
-              || !rawExtraClasspath.isEmpty()
-              || rawConfiguration.getExpandClasspathDependencies())) {
+      if (!isInherit && hasJavaLaunchConfiguration(rawConfiguration, rawExtraClasspath)) {
         projectProperties.log(
             LogEvent.warn(
                 "mainClass, extraClasspath, jvmFlags, and expandClasspathDependencies are ignored "
                     + "for WAR projects"));
       }
 
+      // Use default Jetty command unless a custom base image is provided (inherit its entrypoint).
       List<String> jettyCommand =
-          rawConfiguration.getFromImage().isPresent()
-              ? null // Inherit if a custom base image.
-              : Arrays.asList("java", "-jar", "/usr/local/jetty/start.jar", "--module=ee10-deploy");
+          rawConfiguration.getFromImage().isPresent() ? null : DEFAULT_JETTY_COMMAND;
       if (isInherit) {
         // Route Jetty command to CMD so base image ENTRYPOINT is preserved.
         jibContainerBuilder.setProgramArguments(jettyCommand);
@@ -709,12 +704,11 @@ public class PluginConfigurationProcessor {
       classpathString = "@" + appRoot.resolve(JIB_CLASSPATH_FILE);
     }
 
-    List<String> javaCommand = new ArrayList<>(4 + rawConfiguration.getJvmFlags().size());
-    javaCommand.add("java");
-    javaCommand.addAll(rawConfiguration.getJvmFlags());
-    javaCommand.add("-cp");
-    javaCommand.add(classpathString);
-    javaCommand.add(mainClass);
+    ImmutableList.Builder<String> javaCommandBuilder =
+        ImmutableList.<String>builder().add("java");
+    javaCommandBuilder.addAll(rawConfiguration.getJvmFlags());
+    ImmutableList<String> javaCommand =
+        javaCommandBuilder.add("-cp").add(classpathString).add(mainClass).build();
 
     if (isInherit) {
       // Route Java command to CMD so base image ENTRYPOINT is preserved.
@@ -725,6 +719,15 @@ public class PluginConfigurationProcessor {
       return rawEntrypoint.get();
     }
     return javaCommand;
+  }
+
+  /** Returns true if the user configured mainClass, jvmFlags, extraClasspath, or expandClasspathDependencies. */
+  private static boolean hasJavaLaunchConfiguration(
+      RawConfiguration rawConfiguration, List<String> rawExtraClasspath) {
+    return rawConfiguration.getMainClass().isPresent()
+        || !rawConfiguration.getJvmFlags().isEmpty()
+        || !rawExtraClasspath.isEmpty()
+        || rawConfiguration.getExpandClasspathDependencies();
   }
 
   @VisibleForTesting
