@@ -150,4 +150,26 @@ public class MavenRawConfigurationTest {
 
     Mockito.verifyNoMoreInteractions(eventHandlers);
   }
+
+  /**
+   * Integration test: verifies that MavenRawConfiguration passes "INHERIT" through unmodified,
+   * and does not interfere with programArguments (which must remain absent so that
+   * PluginConfigurationProcessor's CMD routing is not overwritten).
+   */
+  @Test
+  public void testInheritEntrypointPassesThroughMavenAdapter() {
+    JibPluginConfiguration jibPluginConfiguration = Mockito.mock(JibPluginConfiguration.class);
+    Mockito.when(jibPluginConfiguration.getEntrypoint())
+        .thenReturn(Collections.singletonList("INHERIT"));
+    // args is null — user did not set programArguments explicitly.
+    Mockito.when(jibPluginConfiguration.getArgs()).thenReturn(null);
+
+    MavenRawConfiguration rawConfiguration = new MavenRawConfiguration(jibPluginConfiguration);
+
+    // The adapter must surface the keyword verbatim — no transformation.
+    Assert.assertEquals(
+        Optional.of(Collections.singletonList("INHERIT")), rawConfiguration.getEntrypoint());
+    // programArguments must be absent so the processor's CMD routing is not overwritten.
+    Assert.assertEquals(Optional.empty(), rawConfiguration.getProgramArguments());
+  }
 }

@@ -151,4 +151,28 @@ public class GradleRawConfigurationTest {
     Assert.assertEquals(Paths.get("json/path"), rawConfiguration.getImageJsonOutputPath());
     Assert.assertEquals(Paths.get("tar/path"), rawConfiguration.getTarOutputPath());
   }
+
+  /**
+   * Integration test: verifies that GradleRawConfiguration passes "INHERIT" through unmodified,
+   * and does not interfere with programArguments (which must remain absent so that
+   * PluginConfigurationProcessor's CMD routing is not overwritten).
+   */
+  @Test
+  public void testInheritEntrypointPassesThroughGradleAdapter() {
+    JibExtension jibExtension = Mockito.mock(JibExtension.class);
+    ContainerParameters containerParameters = Mockito.mock(ContainerParameters.class);
+    Mockito.when(jibExtension.getContainer()).thenReturn(containerParameters);
+    Mockito.when(containerParameters.getEntrypoint())
+        .thenReturn(Collections.singletonList("INHERIT"));
+    // args is null — user did not set programArguments explicitly.
+    Mockito.when(containerParameters.getArgs()).thenReturn(null);
+
+    GradleRawConfiguration rawConfiguration = new GradleRawConfiguration(jibExtension);
+
+    // The adapter must surface the keyword verbatim — no transformation.
+    Assert.assertEquals(
+        Optional.of(Collections.singletonList("INHERIT")), rawConfiguration.getEntrypoint());
+    // programArguments must be absent so the processor's CMD routing is not overwritten.
+    Assert.assertEquals(Optional.empty(), rawConfiguration.getProgramArguments());
+  }
 }
