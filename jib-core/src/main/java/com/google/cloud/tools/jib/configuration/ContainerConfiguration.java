@@ -52,6 +52,7 @@ public class ContainerConfiguration {
     private Set<Platform> platforms =
         new LinkedHashSet<>(Collections.singleton(new Platform("amd64", "linux")));
     private Instant creationTime = DEFAULT_CREATION_TIME;
+    private ContainerizingMode containerizingMode = ContainerizingMode.ENTRYPOINT;
     @Nullable private ImmutableList<String> entrypoint;
     @Nullable private ImmutableList<String> programArguments;
     @Nullable private Map<String, String> environmentMap;
@@ -108,6 +109,26 @@ public class ContainerConfiguration {
      */
     public Builder setCreationTime(Instant creationTime) {
       this.creationTime = creationTime;
+      return this;
+    }
+
+    /**
+     * Sets the containerizing mode.
+     *
+     * <p>The containerizing mode determines where the Java launch command is placed in the Docker
+     * image configuration:
+     *
+     * <ul>
+     *   <li>{@link ContainerizingMode#ENTRYPOINT} (default): Java command goes to Docker ENTRYPOINT
+     *   <li>{@link ContainerizingMode#CMD}: Java command goes to Docker CMD, preserving base image
+     *       ENTRYPOINT
+     * </ul>
+     *
+     * @param containerizingMode the containerizing mode
+     * @return this
+     */
+    public Builder setContainerizingMode(ContainerizingMode containerizingMode) {
+      this.containerizingMode = containerizingMode;
       return this;
     }
 
@@ -308,6 +329,7 @@ public class ContainerConfiguration {
       return new ContainerConfiguration(
           ImmutableSet.copyOf(platforms),
           creationTime,
+          containerizingMode,
           entrypoint,
           programArguments,
           environmentMap == null ? null : ImmutableMap.copyOf(environmentMap),
@@ -332,6 +354,7 @@ public class ContainerConfiguration {
 
   private final ImmutableSet<Platform> platforms;
   private final Instant creationTime;
+  private final ContainerizingMode containerizingMode;
   @Nullable private final ImmutableList<String> entrypoint;
   @Nullable private final ImmutableList<String> programArguments;
   @Nullable private final ImmutableMap<String, String> environmentMap;
@@ -344,6 +367,7 @@ public class ContainerConfiguration {
   private ContainerConfiguration(
       ImmutableSet<Platform> platforms,
       Instant creationTime,
+      ContainerizingMode containerizingMode,
       @Nullable ImmutableList<String> entrypoint,
       @Nullable ImmutableList<String> programArguments,
       @Nullable ImmutableMap<String, String> environmentMap,
@@ -354,6 +378,7 @@ public class ContainerConfiguration {
       @Nullable AbsoluteUnixPath workingDirectory) {
     this.platforms = platforms;
     this.creationTime = creationTime;
+    this.containerizingMode = containerizingMode;
     this.entrypoint = entrypoint;
     this.programArguments = programArguments;
     this.environmentMap = environmentMap;
@@ -370,6 +395,18 @@ public class ContainerConfiguration {
 
   public Instant getCreationTime() {
     return creationTime;
+  }
+
+  /**
+   * Gets the containerizing mode.
+   *
+   * <p>The containerizing mode determines where the Java launch command is placed in the Docker
+   * image configuration (ENTRYPOINT or CMD).
+   *
+   * @return the containerizing mode
+   */
+  public ContainerizingMode getContainerizingMode() {
+    return containerizingMode;
   }
 
   @Nullable
@@ -424,6 +461,7 @@ public class ContainerConfiguration {
     ContainerConfiguration otherContainerConfiguration = (ContainerConfiguration) other;
     return platforms.equals(otherContainerConfiguration.platforms)
         && creationTime.equals(otherContainerConfiguration.creationTime)
+        && containerizingMode.equals(otherContainerConfiguration.containerizingMode)
         && Objects.equals(entrypoint, otherContainerConfiguration.entrypoint)
         && Objects.equals(programArguments, otherContainerConfiguration.programArguments)
         && Objects.equals(environmentMap, otherContainerConfiguration.environmentMap)
@@ -439,6 +477,7 @@ public class ContainerConfiguration {
     return Objects.hash(
         platforms,
         creationTime,
+        containerizingMode,
         entrypoint,
         programArguments,
         environmentMap,

@@ -153,9 +153,14 @@ class BuildImageStep implements Callable<Image> {
   }
 
   /**
-   * Computes the image entrypoint. If {@link ContainerConfiguration#getEntrypoint()} is null, the
-   * entrypoint is inherited from the base image. Otherwise {@link
+   * Computes the image entrypoint based on the containerizing mode.
+   *
+   * <p>In ENTRYPOINT mode (default): If {@link ContainerConfiguration#getEntrypoint()} is null,
+   * the entrypoint is inherited from the base image. Otherwise {@link
    * ContainerConfiguration#getEntrypoint()} is returned.
+   *
+   * <p>In CMD mode: Always inherits the base image entrypoint (may be null), allowing base image
+   * wrapper scripts or init systems to be preserved.
    *
    * @param baseImage the base image
    * @param containerConfiguration the container configuration
@@ -164,6 +169,23 @@ class BuildImageStep implements Callable<Image> {
   @Nullable
   private ImmutableList<String> computeEntrypoint(
       Image baseImage, ContainerConfiguration containerConfiguration) {
+
+    // CMD mode: Always inherit base image entrypoint to preserve wrapper scripts
+    if (containerConfiguration.getContainerizingMode()
+        == com.google.cloud.tools.jib.configuration.ContainerizingMode.CMD) {
+      ImmutableList<String> inheritedEntrypoint = baseImage.getEntrypoint();
+
+      if (inheritedEntrypoint != null) {
+        buildContext.getEventHandlers().dispatch(LogEvent.lifecycle(""));
+        String message =
+            "Container entrypoint inherited from base image: " + inheritedEntrypoint;
+        buildContext.getEventHandlers().dispatch(LogEvent.lifecycle(message));
+      }
+
+      return inheritedEntrypoint;
+    }
+
+    // ENTRYPOINT mode (default): Current behavior
     boolean shouldInherit =
         baseImage.getEntrypoint() != null && containerConfiguration.getEntrypoint() == null;
 
@@ -186,10 +208,16 @@ class BuildImageStep implements Callable<Image> {
   }
 
   /**
-   * Computes the image program arguments. If {@link ContainerConfiguration#getEntrypoint()} and
-   * {@link ContainerConfiguration#getProgramArguments()} are null, the program arguments are
-   * inherited from the base image. Otherwise {@link ContainerConfiguration#getProgramArguments()}
-   * is returned.
+   * Computes the image program arguments based on the containerizing mode.
+   *
+   * <p>In ENTRYPOINT mode (default): If {@link ContainerConfiguration#getEntrypoint()} and {@link
+   * ContainerConfiguration#getProgramArguments()} are null, the program arguments are inherited
+   * from the base image. Otherwise {@link ContainerConfiguration#getProgramArguments()} is
+   * returned.
+   *
+   * <p>In CMD mode: Combines the configured entrypoint (Java launch command) and program arguments
+   * into a single list that becomes the Docker CMD field. This allows the base image entrypoint to
+   * execute the Java command.
    *
    * @param baseImage the base image
    * @param containerConfiguration the container configuration
@@ -198,6 +226,33 @@ class BuildImageStep implements Callable<Image> {
   @Nullable
   private ImmutableList<String> computeProgramArguments(
       Image baseImage, ContainerConfiguration containerConfiguration) {
+
+    // CMD mode: Combine entrypoint + programArguments into CMD field
+    if (containerConfiguration.getContainerizingMode()
+        == com.google.cloud.tools.jib.configuration.ContainerizingMode.CMD) {
+      ImmutableList.Builder<String> cmdBuilder = ImmutableList.builder();
+
+      // Add the configured "entrypoint" (which is actually the Java launch command in CMD mode)
+      if (containerConfiguration.getEntrypoint() != null) {
+        cmdBuilder.addAll(containerConfiguration.getEntrypoint());
+      }
+
+      // Add any additional program arguments
+      if (containerConfiguration.getProgramArguments() != null) {
+        cmdBuilder.addAll(containerConfiguration.getProgramArguments());
+      }
+
+      ImmutableList<String> combinedCmd = cmdBuilder.build();
+
+      if (!combinedCmd.isEmpty()) {
+        String message = "Container command set to " + truncateLongClasspath(combinedCmd);
+        buildContext.getEventHandlers().dispatch(LogEvent.lifecycle(message));
+      }
+
+      return combinedCmd.isEmpty() ? null : combinedCmd;
+    }
+
+    // ENTRYPOINT mode (default): Current behavior
     boolean shouldInherit =
         baseImage.getProgramArguments() != null
             // Inherit CMD only when inheriting ENTRYPOINT.

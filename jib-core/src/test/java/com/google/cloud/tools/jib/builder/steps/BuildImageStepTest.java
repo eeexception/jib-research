@@ -399,4 +399,210 @@ public class BuildImageStepTest {
             + "truncated ...>, com.example.Main]",
         BuildImageStep.truncateLongClasspath(entrypoint));
   }
+
+  // ============================================================================
+  // RED TESTS: These tests demonstrate the problematic behavior that needs fixing.
+  // These tests are LOCKED and cannot be modified during implementation.
+  // ============================================================================
+
+  /**
+   * RED TEST 1 (LOCKED): CMD mode should preserve base image entrypoint.
+   *
+   * <p>Problem: When a base image has an entrypoint script (e.g., /__cacert_entrypoint.sh), Jib
+   * currently overwrites it with the Java launch command. This test demonstrates that with CMD
+   * mode enabled, the base image entrypoint should be preserved.
+   *
+   * <p>Expected to FAIL until ContainerizingMode.CMD is implemented.
+   */
+  @Test
+  public void testCmdMode_preservesBaseImageEntrypoint() {
+    // Base image has a cacert entrypoint script
+    Image baseImageWithEntrypoint =
+        Image.builder(V22ManifestTemplate.class)
+            .setEntrypoint(ImmutableList.of("/__cacert_entrypoint.sh"))
+            .build();
+
+    // User configures Java command with CMD mode
+    Mockito.when(mockContainerConfiguration.getContainerizingMode())
+        .thenReturn(com.google.cloud.tools.jib.configuration.ContainerizingMode.CMD);
+    Mockito.when(mockContainerConfiguration.getEntrypoint())
+        .thenReturn(ImmutableList.of("java", "-cp", "/app/classes:/app/libs/*", "com.example.Main"));
+    Mockito.when(mockContainerConfiguration.getProgramArguments())
+        .thenReturn(ImmutableList.of("--port", "8080"));
+
+    Image result =
+        new BuildImageStep(
+                mockBuildContext,
+                mockProgressEventDispatcherFactory,
+                baseImageWithEntrypoint,
+                baseImageLayers,
+                applicationLayers)
+            .call();
+
+    // Verify: Base image entrypoint is preserved (not overwritten)
+    Assert.assertEquals(
+        ImmutableList.of("/__cacert_entrypoint.sh"),
+        result.getEntrypoint());
+  }
+
+  /**
+   * RED TEST 2 (LOCKED): CMD mode should combine Java command and args into program arguments.
+   *
+   * <p>Problem: In CMD mode, the Java launch command (configured as "entrypoint") should be placed
+   * in the Docker CMD field (programArguments), combined with any additional arguments.
+   *
+   * <p>Expected to FAIL until ContainerizingMode.CMD is implemented.
+   */
+  @Test
+  public void testCmdMode_combinesJavaCommandAndArgsIntoProgramArguments() {
+    Image baseImageWithEntrypoint =
+        Image.builder(V22ManifestTemplate.class)
+            .setEntrypoint(ImmutableList.of("/__cacert_entrypoint.sh"))
+            .build();
+
+    Mockito.when(mockContainerConfiguration.getContainerizingMode())
+        .thenReturn(com.google.cloud.tools.jib.configuration.ContainerizingMode.CMD);
+    Mockito.when(mockContainerConfiguration.getEntrypoint())
+        .thenReturn(ImmutableList.of("java", "-cp", "/app/classes:/app/libs/*", "com.example.Main"));
+    Mockito.when(mockContainerConfiguration.getProgramArguments())
+        .thenReturn(ImmutableList.of("--port", "8080"));
+
+    Image result =
+        new BuildImageStep(
+                mockBuildContext,
+                mockProgressEventDispatcherFactory,
+                baseImageWithEntrypoint,
+                baseImageLayers,
+                applicationLayers)
+            .call();
+
+    // Verify: Java command + args are combined into program arguments (Docker CMD)
+    Assert.assertEquals(
+        ImmutableList.of("java", "-cp", "/app/classes:/app/libs/*", "com.example.Main", "--port", "8080"),
+        result.getProgramArguments());
+  }
+
+  /**
+   * RED TEST 3 (LOCKED): CMD mode with null base entrypoint should work correctly.
+   *
+   * <p>Edge case: When base image has no entrypoint and CMD mode is enabled, the entrypoint should
+   * remain null and Java command should go to CMD.
+   *
+   * <p>Expected to FAIL until ContainerizingMode.CMD is implemented.
+   */
+  @Test
+  public void testCmdMode_nullBaseEntrypoint_putsCmdOnly() {
+    // Base image with no entrypoint
+    Image baseImageWithoutEntrypoint =
+        Image.builder(V22ManifestTemplate.class)
+            .setEntrypoint(null)
+            .build();
+
+    Mockito.when(mockContainerConfiguration.getContainerizingMode())
+        .thenReturn(com.google.cloud.tools.jib.configuration.ContainerizingMode.CMD);
+    Mockito.when(mockContainerConfiguration.getEntrypoint())
+        .thenReturn(ImmutableList.of("java", "-jar", "app.jar"));
+    Mockito.when(mockContainerConfiguration.getProgramArguments()).thenReturn(null);
+
+    Image result =
+        new BuildImageStep(
+                mockBuildContext,
+                mockProgressEventDispatcherFactory,
+                baseImageWithoutEntrypoint,
+                baseImageLayers,
+                applicationLayers)
+            .call();
+
+    // Verify: Entrypoint remains null (nothing to inherit)
+    Assert.assertNull(result.getEntrypoint());
+
+    // Verify: Java command goes to program arguments (Docker CMD)
+    Assert.assertEquals(
+        ImmutableList.of("java", "-jar", "app.jar"),
+        result.getProgramArguments());
+  }
+
+  /**
+   * RED TEST 4 (LOCKED): ENTRYPOINT mode should maintain current behavior (backward compatibility).
+   *
+   * <p>This test ensures that the default ENTRYPOINT mode maintains the current behavior where the
+   * Java launch command goes to Docker ENTRYPOINT and overwrites the base image entrypoint.
+   *
+   * <p>Expected to FAIL until ContainerizingMode.ENTRYPOINT is implemented with default behavior.
+   */
+  @Test
+  public void testEntrypointMode_maintainsCurrentBehavior() {
+    Image baseImageWithEntrypoint =
+        Image.builder(V22ManifestTemplate.class)
+            .setEntrypoint(ImmutableList.of("/__cacert_entrypoint.sh"))
+            .build();
+
+    // ENTRYPOINT mode (default) - should maintain current behavior
+    Mockito.when(mockContainerConfiguration.getContainerizingMode())
+        .thenReturn(com.google.cloud.tools.jib.configuration.ContainerizingMode.ENTRYPOINT);
+    Mockito.when(mockContainerConfiguration.getEntrypoint())
+        .thenReturn(ImmutableList.of("java", "-jar", "app.jar"));
+    Mockito.when(mockContainerConfiguration.getProgramArguments())
+        .thenReturn(ImmutableList.of("arg1", "arg2"));
+
+    Image result =
+        new BuildImageStep(
+                mockBuildContext,
+                mockProgressEventDispatcherFactory,
+                baseImageWithEntrypoint,
+                baseImageLayers,
+                applicationLayers)
+            .call();
+
+    // Verify: Java command goes to entrypoint (overwrites base image)
+    Assert.assertEquals(
+        ImmutableList.of("java", "-jar", "app.jar"),
+        result.getEntrypoint());
+
+    // Verify: Program arguments remain separate
+    Assert.assertEquals(
+        ImmutableList.of("arg1", "arg2"),
+        result.getProgramArguments());
+  }
+
+  /**
+   * RED TEST 5 (LOCKED): CMD mode with only Java command (no extra args).
+   *
+   * <p>Test case: User provides only the Java command without additional program arguments. The
+   * Java command should still go to CMD in CMD mode.
+   *
+   * <p>Expected to FAIL until ContainerizingMode.CMD is implemented.
+   */
+  @Test
+  public void testCmdMode_onlyJavaCommand_noProgramArguments() {
+    Image baseImageWithEntrypoint =
+        Image.builder(V22ManifestTemplate.class)
+            .setEntrypoint(ImmutableList.of("/tini", "--"))
+            .build();
+
+    Mockito.when(mockContainerConfiguration.getContainerizingMode())
+        .thenReturn(com.google.cloud.tools.jib.configuration.ContainerizingMode.CMD);
+    Mockito.when(mockContainerConfiguration.getEntrypoint())
+        .thenReturn(ImmutableList.of("java", "-jar", "app.jar"));
+    Mockito.when(mockContainerConfiguration.getProgramArguments()).thenReturn(null);
+
+    Image result =
+        new BuildImageStep(
+                mockBuildContext,
+                mockProgressEventDispatcherFactory,
+                baseImageWithEntrypoint,
+                baseImageLayers,
+                applicationLayers)
+            .call();
+
+    // Verify: Base entrypoint preserved
+    Assert.assertEquals(
+        ImmutableList.of("/tini", "--"),
+        result.getEntrypoint());
+
+    // Verify: Java command in program arguments
+    Assert.assertEquals(
+        ImmutableList.of("java", "-jar", "app.jar"),
+        result.getProgramArguments());
+  }
 }
