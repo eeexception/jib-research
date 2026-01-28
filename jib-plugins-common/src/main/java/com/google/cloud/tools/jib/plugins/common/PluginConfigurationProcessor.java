@@ -433,8 +433,11 @@ public class PluginConfigurationProcessor {
     jibContainerBuilder
         .setFormat(rawConfiguration.getImageFormat())
         .setPlatforms(getPlatformsSet(rawConfiguration))
-        .setEntrypoint(computeEntrypoint(rawConfiguration, projectProperties, jibContainerBuilder))
-        .setProgramArguments(rawConfiguration.getProgramArguments().orElse(null))
+        .setEntrypoint(computeEntrypoint(rawConfiguration, projectProperties, jibContainerBuilder));
+    // Only override programArguments if explicitly configured; computeEntrypoint may have already
+    // routed the Java command to CMD when INHERIT is used.
+    rawConfiguration.getProgramArguments().ifPresent(jibContainerBuilder::setProgramArguments);
+    jibContainerBuilder
         .setEnvironment(rawConfiguration.getEnvironment())
         .setExposedPorts(Ports.parse(rawConfiguration.getPorts()))
         .setVolumes(getVolumesSet(rawConfiguration))
@@ -596,8 +599,14 @@ public class PluginConfigurationProcessor {
     Optional<List<String>> rawEntrypoint = rawConfiguration.getEntrypoint();
     List<String> rawExtraClasspath = rawConfiguration.getExtraClasspath();
     boolean entrypointDefined = rawEntrypoint.isPresent() && !rawEntrypoint.get().isEmpty();
+    boolean isInherit =
+        entrypointDefined
+            && rawEntrypoint.get().size() == 1
+            && "INHERIT".equals(rawEntrypoint.get().get(0));
 
+    // When INHERIT is used, mainClass/jvmFlags/etc. are still needed to construct the CMD.
     if (entrypointDefined
+        && !isInherit
         && (rawConfiguration.getMainClass().isPresent()
             || !rawConfiguration.getJvmFlags().isEmpty()
             || !rawExtraClasspath.isEmpty()
@@ -609,24 +618,31 @@ public class PluginConfigurationProcessor {
     }
 
     if (projectProperties.isWarProject()) {
-      if (entrypointDefined) {
-        return rawEntrypoint.get().size() == 1 && "INHERIT".equals(rawEntrypoint.get().get(0))
-            ? null
-            : rawEntrypoint.get();
+      if (entrypointDefined && !isInherit) {
+        return rawEntrypoint.get();
       }
 
-      if (rawConfiguration.getMainClass().isPresent()
-          || !rawConfiguration.getJvmFlags().isEmpty()
-          || !rawExtraClasspath.isEmpty()
-          || rawConfiguration.getExpandClasspathDependencies()) {
+      if (!isInherit
+          && (rawConfiguration.getMainClass().isPresent()
+              || !rawConfiguration.getJvmFlags().isEmpty()
+              || !rawExtraClasspath.isEmpty()
+              || rawConfiguration.getExpandClasspathDependencies())) {
         projectProperties.log(
             LogEvent.warn(
                 "mainClass, extraClasspath, jvmFlags, and expandClasspathDependencies are ignored "
                     + "for WAR projects"));
       }
-      return rawConfiguration.getFromImage().isPresent()
-          ? null // Inherit if a custom base image.
-          : Arrays.asList("java", "-jar", "/usr/local/jetty/start.jar", "--module=ee10-deploy");
+
+      List<String> jettyCommand =
+          rawConfiguration.getFromImage().isPresent()
+              ? null // Inherit if a custom base image.
+              : Arrays.asList("java", "-jar", "/usr/local/jetty/start.jar", "--module=ee10-deploy");
+      if (isInherit) {
+        // Route Jetty command to CMD so base image ENTRYPOINT is preserved.
+        jibContainerBuilder.setProgramArguments(jettyCommand);
+        return null;
+      }
+      return jettyCommand;
     }
 
     List<String> classpath = new ArrayList<>(rawExtraClasspath);
@@ -679,7 +695,7 @@ public class PluginConfigurationProcessor {
           MainClassResolver.resolveMainClass(
               rawConfiguration.getMainClass().orElse(null), projectProperties);
     } catch (MainClassInferenceException ex) {
-      if (entrypointDefined) {
+      if (entrypointDefined && !isInherit) {
         // We will use the user-given entrypoint, so don't fail.
         mainClass = "could-not-infer-a-main-class";
       } else {
@@ -693,19 +709,22 @@ public class PluginConfigurationProcessor {
       classpathString = "@" + appRoot.resolve(JIB_CLASSPATH_FILE);
     }
 
-    if (entrypointDefined) {
-      return rawEntrypoint.get().size() == 1 && "INHERIT".equals(rawEntrypoint.get().get(0))
-          ? null
-          : rawEntrypoint.get();
-    }
+    List<String> javaCommand = new ArrayList<>(4 + rawConfiguration.getJvmFlags().size());
+    javaCommand.add("java");
+    javaCommand.addAll(rawConfiguration.getJvmFlags());
+    javaCommand.add("-cp");
+    javaCommand.add(classpathString);
+    javaCommand.add(mainClass);
 
-    List<String> entrypoint = new ArrayList<>(4 + rawConfiguration.getJvmFlags().size());
-    entrypoint.add("java");
-    entrypoint.addAll(rawConfiguration.getJvmFlags());
-    entrypoint.add("-cp");
-    entrypoint.add(classpathString);
-    entrypoint.add(mainClass);
-    return entrypoint;
+    if (isInherit) {
+      // Route Java command to CMD so base image ENTRYPOINT is preserved.
+      jibContainerBuilder.setProgramArguments(javaCommand);
+      return null;
+    }
+    if (entrypointDefined) {
+      return rawEntrypoint.get();
+    }
+    return javaCommand;
   }
 
   @VisibleForTesting
