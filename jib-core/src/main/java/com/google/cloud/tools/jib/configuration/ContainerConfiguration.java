@@ -466,6 +466,7 @@ public class ContainerConfiguration {
         && Objects.equals(programArguments, otherContainerConfiguration.programArguments)
         && Objects.equals(environmentMap, otherContainerConfiguration.environmentMap)
         && Objects.equals(exposedPorts, otherContainerConfiguration.exposedPorts)
+        && Objects.equals(volumes, otherContainerConfiguration.volumes)
         && Objects.equals(labels, otherContainerConfiguration.labels)
         && Objects.equals(user, otherContainerConfiguration.user)
         && Objects.equals(workingDirectory, otherContainerConfiguration.workingDirectory);
@@ -482,6 +483,7 @@ public class ContainerConfiguration {
         programArguments,
         environmentMap,
         exposedPorts,
+        volumes,
         labels,
         user,
         workingDirectory);

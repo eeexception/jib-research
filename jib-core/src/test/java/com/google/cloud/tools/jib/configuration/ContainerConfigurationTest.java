@@ -155,4 +155,63 @@ public class ContainerConfigurationTest {
         ImmutableSet.of(new Platform("amd64", "linux"), new Platform("testArchitecture", "testOS")),
         configuration.getPlatforms());
   }
+
+  /**
+   * RED TEST: Proves that volumes field is missing from equals() and hashCode().
+   *
+   * <p>This test demonstrates a bug where two ContainerConfiguration objects with different volumes
+   * are incorrectly considered equal. This violates the equals/hashCode contract.
+   *
+   * <p>Expected to FAIL until volumes field is added to equals() and hashCode() methods.
+   */
+  @Test
+  public void testEquals_volumesFieldShouldBeCompared() {
+    // Create two configurations that differ ONLY in volumes
+    ContainerConfiguration configWithVolume1 =
+        ContainerConfiguration.builder()
+            .setVolumes(ImmutableSet.of(AbsoluteUnixPath.get("/volume1")))
+            .build();
+
+    ContainerConfiguration configWithVolume2 =
+        ContainerConfiguration.builder()
+            .setVolumes(ImmutableSet.of(AbsoluteUnixPath.get("/volume2")))
+            .build();
+
+    // These should NOT be equal because they have different volumes
+    Assert.assertNotEquals(
+        "ContainerConfiguration objects with different volumes should not be equal",
+        configWithVolume1,
+        configWithVolume2);
+  }
+
+  /**
+   * RED TEST: Proves that volumes field is missing from hashCode().
+   *
+   * <p>This test demonstrates a bug where two ContainerConfiguration objects with different volumes
+   * have the same hashCode. This violates the equals/hashCode contract: if two objects are not
+   * equal, their hashCodes should (ideally) be different.
+   *
+   * <p>Expected to FAIL until volumes field is added to hashCode() method.
+   */
+  @Test
+  public void testHashCode_volumesFieldShouldAffectHashCode() {
+    // Create two configurations that differ ONLY in volumes
+    ContainerConfiguration configWithVolume1 =
+        ContainerConfiguration.builder()
+            .setVolumes(ImmutableSet.of(AbsoluteUnixPath.get("/volume1")))
+            .build();
+
+    ContainerConfiguration configWithVolume2 =
+        ContainerConfiguration.builder()
+            .setVolumes(ImmutableSet.of(AbsoluteUnixPath.get("/volume2")))
+            .build();
+
+    // These should have different hash codes because they have different volumes
+    // Note: This isn't a strict requirement (hash collisions are allowed), but for
+    // correct implementation, different volumes should produce different hash codes
+    Assert.assertNotEquals(
+        "ContainerConfiguration objects with different volumes should have different hash codes",
+        configWithVolume1.hashCode(),
+        configWithVolume2.hashCode());
+  }
 }
