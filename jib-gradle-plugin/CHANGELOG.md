@@ -3,7 +3,8 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
-### Added 
+### Added
+- feat: support `INHERIT` entrypoint to route the Java launch command to CMD, preserving base image ENTRYPOINT (e.g. certificate-setup scripts that `exec "$@"`)
 
 ### Changed
 
